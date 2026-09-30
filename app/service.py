@@ -20,9 +20,11 @@ def submit_application(app: Application, lender: LenderClient) -> Application:
     if app.status != Status.DRAFT:
         raise InvalidState(f"application {app.id} is already {app.status.value}")
 
+    # A timeout doesn't tell us whether the lender recorded the submission, so every retry must
+    # carry the same idempotency key. The application id is stable across retries and restarts.
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
-            reference = lender.submit(app)
+            reference = lender.submit(app, idempotency_key=app.id)
             break
         except (LenderUnreachable, LenderTimeout) as exc:
             logger.warning("lender submit failed (attempt %d/%d): %r", attempt, MAX_ATTEMPTS, exc)

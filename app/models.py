@@ -23,3 +23,4 @@ class Application(ApplicationIn):
     status: Status = Status.DRAFT
     lender_reference: str | None = None
     created_at: datetime
+    processed_event_ids: set[str] = Field(default_factory=set, exclude=True)

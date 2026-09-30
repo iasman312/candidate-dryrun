@@ -3,8 +3,6 @@ import hmac
 
 import pytest
 
-# Task 2 (stretch): delete the next line when you start on the webhook.
-pytestmark = pytest.mark.skip(reason="Task 2 (stretch) not started")
 
 SECRET = "test-webhook-secret"
 
@@ -73,3 +71,39 @@ def test_unknown_reference_is_404(client, submitted_application):
     body = event("LND-99999", "approved")
 
     assert post_event(client, body, sign(body)).status_code == 404
+
+
+def status_of(client, app) -> str:
+    return client.get(f"/applications/{app['id']}").json()["status"]
+
+
+def test_duplicate_event_is_acknowledged_once(client, submitted_application):
+    ref = submitted_application["lender_reference"]
+    approved = event(ref, "approved", "evt_1")
+    funded = event(ref, "funded", "evt_2")
+    post_event(client, approved, sign(approved))
+    post_event(client, funded, sign(funded))
+
+    resp = post_event(client, approved, sign(approved))
+
+    assert resp.status_code == 200
+    assert status_of(client, submitted_application) == "funded"
+
+
+def test_late_event_does_not_move_status_backwards(client, submitted_application):
+    ref = submitted_application["lender_reference"]
+    for evt_id, status in [("evt_1", "approved"), ("evt_2", "funded")]:
+        body = event(ref, status, evt_id)
+        post_event(client, body, sign(body))
+
+    stale = event(ref, "approved", "evt_3")
+    resp = post_event(client, stale, sign(stale))
+
+    assert resp.status_code == 200
+    assert status_of(client, submitted_application) == "funded"
+
+
+def test_invalid_status_is_422(client, submitted_application):
+    body = event(submitted_application["lender_reference"], "draft")
+
+    assert post_event(client, body, sign(body)).status_code == 422
